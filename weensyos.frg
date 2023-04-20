@@ -3,16 +3,19 @@
 option problem_type temporal
 option max_tracelength 14
 
+sig VirtualAddress {}
+
 sig Page {}
 
-sig Process {
+abstract sig Process {
     var pid : one Int,
-    var pages : set Page
+    var pagetable : pfunc VirtualAddress -> Page
 }
 
-one sig Kernel {
+sig UserProcess extends Process {}
+
+one sig Kernel extends Process {
     var active : set Process,
-    kpages : set Page,
     var available : set Page
 }
 
@@ -29,8 +32,11 @@ pred wellformed {
     // every cell is either in available cells or in a proc's pages or in kernel's pages
 }
 
+// can't allocate a page already assigned to another process
 pred kalloc[proc : Process] {}
 
+// security issue: processes shouldn't be allowed to free other proc's pages. 
+// should also take in the proc that's trying to free and check that the page belongs to it
 pred kfree[page : Page] {
     // free page
     Kernel.available' = Kernel.available + page
