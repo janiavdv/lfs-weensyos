@@ -16,7 +16,7 @@ abstract sig Process {
 sig UserProcess extends Process {}
 
 one sig Kernel extends Process {
-    var active : set Process,
+    var active : set UserProcess,
     var available : set Page
 }
 
@@ -24,7 +24,7 @@ pred init {
     no UserProcess.pagetable // no mappings in user process' pagetable yet
     some Kernel.pagetable
     some Kernel.available
-    no Kernel.active
+    all p : UserProcess | p in Kernel.active
 }
 
 pred wellformed {
@@ -62,17 +62,17 @@ pred wellformed {
     all uproc : UserProcess | uproc.pid > 0
 }
 
-pred maintenance[proc: Process] {
+pred maintainPagetables[proc: Process] {
     all p: Process | (p != proc) => {
         p.pagetable' = p.pagetable
     }
-    Kernel.active' = Kernel.active
 }
 
 // TODO: nothing is getting allocated in traces even when we call this on kalloc[proc, proc]
 pred kalloc[proc : Process, caller : Process] {
     (proc = caller) => {
-        some page : Page | (page in Kernel.available) => {
+        some page : Page | {
+            page in Kernel.available
             some va2 : VirtualAddress | caller.pagetable' = caller.pagetable + (va2 -> page)
             Kernel.available' = Kernel.available - page
         }
@@ -84,7 +84,8 @@ pred kalloc[proc : Process, caller : Process] {
         Kernel.available' = Kernel.available  
     }
 
-    maintenance[caller]
+    maintainPagetables[caller]
+    Kernel.active' = Kernel.active
 }
 
 pred kfree[page : Page, caller : Process] {
@@ -96,19 +97,31 @@ pred kfree[page : Page, caller : Process] {
         Kernel.available' = Kernel.available
     }
 
-    maintenance[caller]
+    maintainPagetables[caller]
+    Kernel.active' = Kernel.active
 }
 
-pred exit[proc : UserProcess] {
-    // kfree all pages mapped to by proc
-    all page : Page | {
-        some va : VirtualAddress | (proc.pagetable[va] = page) => {
-            kfree[page, proc]
+pred exit[proc : UserProcess, caller : Process] {
+    // GUARD
+    proc != Kernel // kernel never exits
+    proc in Kernel.active and caller in Kernel.active
+
+    // ACTION
+    (proc = caller or caller = Kernel) => {
+        all page : Page | {
+            some va : VirtualAddress | (proc.pagetable[va] = page) => {
+                kfree[page, proc]
+            }
         }
-    } 
-    no proc.pagetable'
-    Kernel.active' = Kernel.active - proc
-    
+        no proc.pagetable'
+        // keep in mind that this conflicts with Kernel.active' = Kernel.active in kfree, but not currently unsat
+        Kernel.active' = Kernel.active - proc
+    } else {
+        proc.pagetable' = proc.pagetable
+        Kernel.active' = Kernel.active
+        Kernel.available' = Kernel.available
+    }
+     maintainPagetables[proc]
 }
 
 pred doNothing {
@@ -117,26 +130,19 @@ pred doNothing {
     // ACTION: maintain everything
     Kernel.active' = Kernel.active
     Kernel.available' = Kernel.available
+    pagetable = pagetable'
 }
 
 pred traces {
     init
     always(wellformed)
     always(
-
         // multiple processes can do stuff at a time, but the same process can't do two things at a time
-        all proc : Process | {
-            // MODELING CHOICE : every process is always doing something
-            some proc2 : Process | {
-                //kalloc[proc, proc]
-
-                // TODO : figure out why the below is unsat
-                //{kalloc[proc, proc2] and (no p : Page | kfree[p, proc])}
-                //or
-                //{not kalloc[proc, proc2] and (some p : Page | kfree[p, proc])}
-            }
-        } or
-        doNothing
+        some proc1, proc2 : Process | {
+            // kalloc[proc1, proc2] or
+            // (some p : Page | kfree[p, proc1]) or
+            exit[proc1, proc2]
+        }
     )
 }
 
