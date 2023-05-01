@@ -2,7 +2,7 @@
 
 option problem_type temporal
 option max_tracelength 14
-option min_tracelength 3
+option min_tracelength 6
 
 sig VirtualAddress {}
 
@@ -68,35 +68,36 @@ pred maintainPagetables[proc: Process] {
     }
 }
 
-// TODO: nothing is getting allocated in traces even when we call this on kalloc[proc, proc]
 pred kalloc[proc : Process, caller : Process] {
-    (proc = caller) => {
-        some page : Page | {
-            page in Kernel.available
-            some va2 : VirtualAddress | caller.pagetable' = caller.pagetable + (va2 -> page)
-            Kernel.available' = Kernel.available - page
-        }
-    } else {
-        // not allowed to allocate a page to another process; do nothing
-        // TODO: can't allocate two different pages to a process at a time b/c we're saying that everything must
-        // remain the same if *this* kalloc call fails, but what if another one should succeed?
-        proc.pagetable' = proc.pagetable
-        Kernel.available' = Kernel.available  
+    // GUARD
+    proc = caller // extra restriction b/c it doesn't make sense for Kernel to allocate pages that a process hasn't asked for
+    caller = Kernel or caller in Kernel.active
+    proc in Kernel.active
+    
+    // ACTION
+    some page : Page | {
+        page in Kernel.available
+        some va2 : VirtualAddress | caller.pagetable' = caller.pagetable + (va2 -> page)
+        Kernel.available' = Kernel.available - page
     }
-
+    
+    // MAINTAIN
     maintainPagetables[caller]
     Kernel.active' = Kernel.active
 }
 
 pred kfree[page : Page, caller : Process] {
+    // GUARD
+    caller in Kernel.active or caller = Kernel
     
-    some va : VirtualAddress | caller.pagetable[va] = page => {
+    // ACTION
+    some va : VirtualAddress | {
+        caller.pagetable[va] = page 
         Kernel.available' = Kernel.available + page
         caller.pagetable' = caller.pagetable - (va -> page)
-    } else {
-        Kernel.available' = Kernel.available
     }
 
+    // MAINTAIN
     maintainPagetables[caller]
     Kernel.active' = Kernel.active
 }
@@ -104,30 +105,24 @@ pred kfree[page : Page, caller : Process] {
 pred exit[proc : UserProcess, caller : Process] {
     // GUARD
     proc != Kernel // kernel never exits
-    proc in Kernel.active and caller in Kernel.active
+    proc in Kernel.active
+    caller = proc or caller = Kernel
 
     // ACTION
-    (proc = caller or caller = Kernel) => {
-        all page : Page | {
-            some va : VirtualAddress | (proc.pagetable[va] = page) => {
-                kfree[page, proc]
-            }
+    all page : Page | {
+        some va : VirtualAddress | (proc.pagetable[va] = page) => {
+            kfree[page, proc]
         }
-        no proc.pagetable'
-        // keep in mind that this conflicts with Kernel.active' = Kernel.active in kfree, but not currently unsat
-        Kernel.active' = Kernel.active - proc
-    } else {
-        proc.pagetable' = proc.pagetable
-        Kernel.active' = Kernel.active
-        Kernel.available' = Kernel.available
     }
-     maintainPagetables[proc]
+    no proc.pagetable'
+    Kernel.active' = Kernel.active - proc
+    
+    // MAINTAIN
+    maintainPagetables[proc]
 }
 
 pred doNothing {
-    // GUARD: all UserProcesses have exited
-    no Kernel.active
-    // ACTION: maintain everything
+    // MAINTAIN
     Kernel.active' = Kernel.active
     Kernel.available' = Kernel.available
     pagetable = pagetable'
@@ -139,10 +134,11 @@ pred traces {
     always(
         // multiple processes can do stuff at a time, but the same process can't do two things at a time
         some proc1, proc2 : Process | {
-            // kalloc[proc1, proc2] or
-            // (some p : Page | kfree[p, proc1]) or
+            kalloc[proc1, proc2] or
+            (some p : Page | kfree[p, proc1]) or
             exit[proc1, proc2]
         }
+        or doNothing
     )
 }
 
