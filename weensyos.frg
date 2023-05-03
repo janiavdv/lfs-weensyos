@@ -9,7 +9,6 @@ sig VirtualAddress {}
 sig Page {}
 
 abstract sig Process {
-    pid : one Int,
     var pagetable : pfunc VirtualAddress -> Page
 }
 
@@ -25,42 +24,42 @@ pred init {
     some Kernel.pagetable
     some Kernel.available
     all p : UserProcess | p in Kernel.active
-}
-
-pred wellformed {
     
-    // a page is available iff it is not mapped to by any process
     all page : Page | {
-        {page in Kernel.available} <=> {all p : Process | (no va: VirtualAddress | p.pagetable[va] = page)}
-    }
-
-    // in a single process, at most one va should map to a page
-    all proc : Process | {
-        all page: Page | {
-            
-            // proc only has one virtual address mapping to the page
-            all disj va, va2 : VirtualAddress | (proc.pagetable[va] = page) => {
-                proc.pagetable[va2] != page
-            }
-            
-            // process isolation: no process should share pages with another process
-            some va: VirtualAddress | proc.pagetable[va] = page => {
-                no proc2 : Process | {
-                    some va2 : VirtualAddress | proc2.pagetable[va2] = page
-                }
-            }
+        // page is available iff it's not mapped to by the kernel
+        {page in Kernel.available} <=> {(no va: VirtualAddress | Kernel.pagetable[va] = page)}
+        // no two virtual addresses map to the same page
+        all disj va, va2 : VirtualAddress | (Kernel.pagetable[va] = page) => {
+            Kernel.pagetable[va2] != page
         }
     }
-    
-    // no two processes have the same PID
-    all disj p1, p2: Process | {
-        p1.pid != p2.pid
-    }
-
-    // kernel has PID 0, all others are > 0
-    Kernel.pid = 0
-    all uproc : UserProcess | uproc.pid > 0
 }
+
+// pred wellformed {
+    
+//     // a page is available iff it is not mapped to by any process
+//     all page : Page | {
+//         {page in Kernel.available} <=> {all p : Process | (no va: VirtualAddress | p.pagetable[va] = page)}
+//     }
+
+//     // in a single process, at most one va should map to a page
+//     all proc : Process | {
+//         all page: Page | {
+            
+//             // proc only has one virtual address mapping to the page
+//             all disj va, va2 : VirtualAddress | (proc.pagetable[va] = page) => {
+//                 proc.pagetable[va2] != page
+//             }
+            
+//             // process isolation: no process should share pages with another process
+//             some va: VirtualAddress | proc.pagetable[va] = page => {
+//                 no proc2 : Process | {
+//                     some va2 : VirtualAddress | proc2.pagetable[va2] = page
+//                 }
+//             }
+//         }
+//     }
+// }
 
 pred maintainPagetables[proc: Process] {
     all p: Process | (p != proc) => {
@@ -112,6 +111,9 @@ pred exit[proc : UserProcess, caller : Process] {
     all page : Page | {
         some va : VirtualAddress | (proc.pagetable[va] = page) => {
             kfree[page, proc]
+        } else {
+            // proc doesn't have a pagetable, so kfree doesn't get called to manage Kernel.available --> do it here
+            Kernel.available' = Kernel.available
         }
     }
     no proc.pagetable'
@@ -130,14 +132,16 @@ pred doNothing {
 
 pred traces {
     init
-    always(wellformed)
+    // always(wellformed)
     always(
+        // TODO: I don't think we actually guarantee this comment is true?
         // multiple processes can do stuff at a time, but the same process can't do two things at a time
         some proc1, proc2 : Process | {
             kalloc[proc1, proc2] or
             (some p : Page | kfree[p, proc1]) or
             exit[proc1, proc2]
         }
+        // TODO: for some reason it's hitting this too early -- not kallocing when there's available memory, but weirdly does it later in the trace without issue?
         or doNothing
     )
 }
