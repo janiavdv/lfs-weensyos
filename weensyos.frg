@@ -76,12 +76,16 @@ pred kalloc[proc : Process, caller : Process] {
     // ACTION
     some page : Page | {
         page in Kernel.available
-        some va2 : VirtualAddress | caller.pagetable' = caller.pagetable + (va2 -> page)
+        (VirtualAddress -> page) not in proc.pagetable
+        some va2 : VirtualAddress | {
+            (va2 -> Page) not in proc.pagetable
+            proc.pagetable' = proc.pagetable + (va2 -> page)
+        }
         Kernel.available' = Kernel.available - page
     }
     
     // MAINTAIN
-    maintainPagetables[caller]
+    maintainPagetables[proc]
     Kernel.active' = Kernel.active
 }
 
@@ -108,19 +112,18 @@ pred exit[proc : UserProcess, caller : Process] {
     caller = proc or caller = Kernel
 
     // ACTION
-    all page : Page | {
-        some va : VirtualAddress | (proc.pagetable[va] = page) => {
-            kfree[page, proc]
-        } else {
-            // proc doesn't have a pagetable, so kfree doesn't get called to manage Kernel.available --> do it here
-            Kernel.available' = Kernel.available
-        }
+    some proc.pagetable implies {
+        all page : Page | (VirtualAddress -> page) in proc.pagetable => { 
+            page in Kernel.available'
+        } 
     }
     no proc.pagetable'
     Kernel.active' = Kernel.active - proc
     
     // MAINTAIN
     maintainPagetables[proc]
+    //all avail : Page | (avail in Kernel.available) implies (avail in Kernel.available')
+    Kernel.available' = Kernel.available + {page : Page | (VirtualAddress -> page) in proc.pagetable} // => { page in Kernel.available'}}
 }
 
 pred doNothing {
@@ -132,21 +135,28 @@ pred doNothing {
 
 pred traces {
     init
-    // always(wellformed)
     always(
-        // TODO: I don't think we actually guarantee this comment is true?
-        // multiple processes can do stuff at a time, but the same process can't do two things at a time
         some proc1, proc2 : Process | {
             kalloc[proc1, proc2] or
             (some p : Page | kfree[p, proc1]) or
             exit[proc1, proc2]
         }
-        // TODO: for some reason it's hitting this too early -- not kallocing when there's available memory, but weirdly does it later in the trace without issue?
         or doNothing
     )
 }
 
 
+// run {
+//     traces
+// } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+
+// CASE : UP has mappings then exits (multi-free)
+// run {
+//     traces
+//     some p : UserProcess | eventually (some p.pagetable and exit[p, p])
+// } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+
 run {
     traces
+    some p : UserProcess | eventually (some p.pagetable and kalloc[p, p])
 } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
