@@ -3,14 +3,13 @@
 open "weensyos.frg"
 
 // VACUITY / SATISFIABILITY
-// test expect {
-//     vacuityTraces: {traces} is sat
-//     satInit: {init} is sat
-//     satWellformed: {wellformed} is sat
-//     satKalloc: {some p1, p2 : Process | kalloc[p1,p2]} is sat
-//     satKfree: {some proc : Process, page : Page | kfree[page,proc]} is sat
-//     satExit: {some p1, p2 : Process | exit[p1,p2]} is sat
-// }
+test expect {
+    vacuityTraces: {traces} is sat
+    satInit: {init} is sat
+    satKalloc: {some p1, p2 : Process | kalloc[p1,p2]} is sat
+    satKfree: {some proc : Process, page : Page | kfree[page,proc]} is sat
+    satExit: {some p1, p2 : Process | exit[p1,p2]} is sat
+}
 
 -----------------------------------
 // ACTIVE/INACTIVE
@@ -28,15 +27,15 @@ pred isInactiveNoPages {
     )
 }
 
-// test expect {
-//     pageActive : {
-//         traces implies hasPagesIsActive
-//     } is theorem
+test expect {
+    pageActive : {
+        traces implies hasPagesIsActive
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
 
-//     inactiveNoPage : {
-//         traces implies isInactiveNoPages
-//     } is theorem
-// }
+    inactiveNoPage : {
+        traces implies isInactiveNoPages
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+}
 
 -----------------------------------
 // PROCESS ISOLATION -- Memory cells belong to exactly one process; there is no sharing of memory between processes or the kernel.
@@ -60,15 +59,15 @@ pred kernelIsolation {
     )
 }
 
-// test expect {
-//     uniqueMem: {
-//         traces implies noSharedPages
-//     } is theorem
+test expect {
+    uniqueMem: {
+        traces implies noSharedPages
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
     
-//     disjoint : {
-//         traces implies kernelIsolation
-//     } is theorem
-// }
+    disjoint : {
+        traces implies kernelIsolation
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+}
 
 -----------------------------------
 // MEMORY MANAGEMENT
@@ -78,6 +77,8 @@ pred availOrAlloc {
         all p: Page | {
             (p in Kernel.available) implies ((VirtualAddress -> p) not in Process.pagetable)
         }
+    )
+    always (
         some p : Page | {
             ((VirtualAddress -> p) in Process.pagetable) implies (p not in Kernel.available)
         }
@@ -86,16 +87,16 @@ pred availOrAlloc {
 
 // Memory can be reused by another process if it’s been freed.
 pred canReuse {
-    some p : Page, proc : Process | once(kfree[p, proc]) and eventually(p not in Kernel.available)
+    eventually (some p : Page, proc : Process | once(kfree[p, proc]) and eventually(p not in Kernel.available))
 }
 
 // Multiple processes can use the same virtual address
 pred sameVA {
-    some disj p1, p2 : Process | {
-        some va : VirtualAddress | {
-            (va -> Page) in p1.pagetable and (va -> Page) in p2.pagetable
-        }
-    } 
+    eventually (
+        some disj p1, p2 : UserProcess | {
+            some va : VirtualAddress | (some p1.pagetable[va]) and (some p2.pagetable[va])
+        } 
+    )
 }
 
 // A user process has a page mapped to it if kalloc was called before
@@ -114,47 +115,36 @@ pred memoryFull {
     )
 }
 
-// If there are no user processes, must always doNothing from that point forward
-pred noActiveDN {
-    always (
-        (no Kernel.active) implies (always doNothing)
-    )
-}
-
 test expect {
-    
     pageDisj: {
         traces implies availOrAlloc
-    } is theorem
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
 
-    // twoPagesOneVA : {
-    //     traces and sameVA
-    // } is sat
+    twoPagesOneVA : {
+        traces and sameVA
+    } is sat
     
-    // freeThenReuse : {
-    //     traces and canReuse
-    // } is sat
+    freeThenReuse : {
+        traces and canReuse
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is sat
 
-    // allocation : {
-    //     traces implies kallocAllocates
-    // } is theorem
+    allocation : {
+        traces implies kallocAllocates
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
 
-    // allUsed : {
-    //     traces implies memoryFull
-    // } is theorem
-
-    // noActive : {
-    //     traces implies noActiveDN
-    // } is theorem
+    allUsed : {
+        traces implies memoryFull
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
 }
     
 -----------------------------------
 // PERMISSIONS/SECURITY
-// Shouldn’t be able to free pages that don't belong to the calling process
+// A user process shouldn’t be able to free pages that don't belong to it
 pred belongOnlyKfree {
     always (
-        all p : Page, proc : Process | {
-            p not in proc.pagetable => not kfree[p, proc]
+        all p : Page, proc : UserProcess | {
+            (no va: VirtualAddress | proc.pagetable[va] = p) implies (not kfree[p, proc])
+            // (VirtualAddress -> p) not in proc.pagetable) 
         }
     )
 }
@@ -179,25 +169,27 @@ pred callerOnlyExit {
 
 // Kernel is allowed to exit a process
 pred kernelCanKill {
-    some up : UserProcess | {
-        exit[up, Kernel]
-    }
+    eventually (
+        some up : UserProcess | {
+            exit[up, Kernel]
+        }
+    )
 }
 
-// test expect {
-//     freeOwn : {
-//         traces implies belongOnlyKfree 
-//     } is theorem
+test expect {
+    freeOwn : {
+        traces implies belongOnlyKfree 
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
     
-//     allocSelf : {
-//         traces implies callerOnlyKalloc 
-//     } is theorem
+    allocSelf : {
+        traces implies callerOnlyKalloc 
+    } for exactly 2  UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
 
-//     exitSelf : {
-//         traces implies callerOnlyExit
-//     } is theorem
+    exitSelf : {
+        traces implies callerOnlyExit
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
 
-//     kernelKill : {
-//         traces and kernelCanKill
-//     } is sat
-// }
+    kernelKill : {
+        traces and kernelCanKill
+    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is sat
+}

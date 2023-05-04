@@ -69,14 +69,14 @@ pred maintainPagetables[proc: Process] {
 
 pred kalloc[proc : Process, caller : Process] {
     // GUARD
-    proc = caller // extra restriction b/c it doesn't make sense for Kernel to allocate pages that a process hasn't asked for
+    proc = caller
     caller = Kernel or caller in Kernel.active
     proc in Kernel.active
     
     // ACTION
     some page : Page | {
         page in Kernel.available
-        (VirtualAddress -> page) not in proc.pagetable
+        (no va: VirtualAddress | proc.pagetable[va] = page)
         some va2 : VirtualAddress | {
             (va2 -> Page) not in proc.pagetable
             proc.pagetable' = proc.pagetable + (va2 -> page)
@@ -95,7 +95,7 @@ pred kfree[page : Page, caller : Process] {
     
     // ACTION
     some va : VirtualAddress | {
-        caller.pagetable[va] = page 
+        caller.pagetable[va] = page // caller can only free its own page
         Kernel.available' = Kernel.available + page
         caller.pagetable' = caller.pagetable - (va -> page)
     }
@@ -113,7 +113,7 @@ pred exit[proc : UserProcess, caller : Process] {
 
     // ACTION
     some proc.pagetable implies {
-        all page : Page | (VirtualAddress -> page) in proc.pagetable => { 
+        all page : Page | (some va : VirtualAddress | proc.pagetable[va] = page) => { 
             page in Kernel.available'
         } 
     }
@@ -123,7 +123,7 @@ pred exit[proc : UserProcess, caller : Process] {
     // MAINTAIN
     maintainPagetables[proc]
     //all avail : Page | (avail in Kernel.available) implies (avail in Kernel.available')
-    Kernel.available' = Kernel.available + {page : Page | (VirtualAddress -> page) in proc.pagetable} // => { page in Kernel.available'}}
+    Kernel.available' = Kernel.available + {page : Page | (some va : VirtualAddress | proc.pagetable[va] = page)} // => { page in Kernel.available'}}
 }
 
 pred doNothing {
@@ -146,9 +146,9 @@ pred traces {
 }
 
 
-// run {
-//     traces
-// } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+run {
+    traces
+} for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
 
 // CASE : UP has mappings then exits (multi-free)
 // run {
@@ -156,7 +156,7 @@ pred traces {
 //     some p : UserProcess | eventually (some p.pagetable and exit[p, p])
 // } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
 
-run {
-    traces
-    some p : UserProcess | eventually (some p.pagetable and kalloc[p, p])
-} for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+// run {
+//     traces
+//     some p : UserProcess | eventually (some p.pagetable and kalloc[p, p])
+// } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
