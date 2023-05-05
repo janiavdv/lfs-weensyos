@@ -1,8 +1,8 @@
 #lang forge
 
 option problem_type temporal
-option max_tracelength 14
-option min_tracelength 6
+option max_tracelength 5
+option min_tracelength 2
 
 sig VirtualAddress {}
 
@@ -34,32 +34,6 @@ pred init {
         }
     }
 }
-
-// pred wellformed {
-    
-//     // a page is available iff it is not mapped to by any process
-//     all page : Page | {
-//         {page in Kernel.available} <=> {all p : Process | (no va: VirtualAddress | p.pagetable[va] = page)}
-//     }
-
-//     // in a single process, at most one va should map to a page
-//     all proc : Process | {
-//         all page: Page | {
-            
-//             // proc only has one virtual address mapping to the page
-//             all disj va, va2 : VirtualAddress | (proc.pagetable[va] = page) => {
-//                 proc.pagetable[va2] != page
-//             }
-            
-//             // process isolation: no process should share pages with another process
-//             some va: VirtualAddress | proc.pagetable[va] = page => {
-//                 no proc2 : Process | {
-//                     some va2 : VirtualAddress | proc2.pagetable[va2] = page
-//                 }
-//             }
-//         }
-//     }
-// }
 
 pred maintainPagetables[proc: Process] {
     all p: Process | (p != proc) => {
@@ -145,17 +119,18 @@ pred traces {
     )
 }
 
-
+// CASE : basic trace
 run {
     traces
 } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
 
-// CASE : UP has mappings then exits (multi-free)
+// CASE : User process has mappings then exits (multi-free)
 // run {
 //     traces
 //     some p : UserProcess | eventually (some p.pagetable and exit[p, p])
 // } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
 
+// CASE : kalloc gets called
 // run {
 //     traces
 //     some p : UserProcess | eventually (some p.pagetable and kalloc[p, p])

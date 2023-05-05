@@ -30,11 +30,11 @@ pred isInactiveNoPages {
 test expect {
     pageActive : {
         traces implies hasPagesIsActive
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 
     inactiveNoPage : {
         traces implies isInactiveNoPages
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 }
 
 -----------------------------------
@@ -45,8 +45,8 @@ pred noSharedPages {
     always (
         no disj p1, p2 : Process | {
             some p : Page | {
-                (VirtualAddress -> p) in p1.pagetable
-                (VirtualAddress -> p) in p2.pagetable
+                some va : VirtualAddress | p1.pagetable[va] = p
+                some va : VirtualAddress | p2.pagetable[va] = p
             }
         }
     )
@@ -62,11 +62,11 @@ pred kernelIsolation {
 test expect {
     uniqueMem: {
         traces implies noSharedPages
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
     
     disjoint : {
         traces implies kernelIsolation
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 }
 
 -----------------------------------
@@ -75,12 +75,12 @@ test expect {
 pred availOrAlloc {
     always (
         all p: Page | {
-            (p in Kernel.available) implies ((VirtualAddress -> p) not in Process.pagetable)
+            (p in Kernel.available) implies (no va : VirtualAddress | Process.pagetable[va] = p)
         }
     )
     always (
         some p : Page | {
-            ((VirtualAddress -> p) in Process.pagetable) implies (p not in Kernel.available)
+            (some va : VirtualAddress | Process.pagetable[va] = p) implies (p not in Kernel.available)
         }
     )
 }
@@ -118,23 +118,23 @@ pred memoryFull {
 test expect {
     pageDisj: {
         traces implies availOrAlloc
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 
     twoPagesOneVA : {
         traces and sameVA
-    } is sat
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is sat
     
     freeThenReuse : {
         traces and canReuse
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is sat
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is sat
 
     allocation : {
         traces implies kallocAllocates
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for exactly 3 UserProcess, 3 Page, 3 VirtualAddress is theorem // use exactly so there's at least one UserProcess
 
     allUsed : {
         traces implies memoryFull
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 }
     
 -----------------------------------
@@ -144,7 +144,6 @@ pred belongOnlyKfree {
     always (
         all p : Page, proc : UserProcess | {
             (no va: VirtualAddress | proc.pagetable[va] = p) implies (not kfree[p, proc])
-            // (VirtualAddress -> p) not in proc.pagetable) 
         }
     )
 }
@@ -179,17 +178,17 @@ pred kernelCanKill {
 test expect {
     freeOwn : {
         traces implies belongOnlyKfree 
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
     
     allocSelf : {
         traces implies callerOnlyKalloc 
-    } for exactly 2  UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 
     exitSelf : {
         traces implies callerOnlyExit
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is theorem
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is theorem
 
     kernelKill : {
         traces and kernelCanKill
-    } for exactly 2 UserProcess, exactly 2 Page, exactly 2 VirtualAddress is sat
+    } for 3 UserProcess, 3 Page, 3 VirtualAddress is sat
 }
