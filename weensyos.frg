@@ -1,8 +1,8 @@
 #lang forge
 
 option problem_type temporal
-option max_tracelength 5
-option min_tracelength 2
+option max_tracelength 5 // the tests will take longer if this increases
+// option min_tracelength 4 // comment this in to get more interesting Sterling traces
 
 sig VirtualAddress {}
 
@@ -96,7 +96,6 @@ pred exit[proc : UserProcess, caller : Process] {
     
     // MAINTAIN
     maintainPagetables[proc]
-    //all avail : Page | (avail in Kernel.available) implies (avail in Kernel.available')
     Kernel.available' = Kernel.available + {page : Page | (some va : VirtualAddress | proc.pagetable[va] = page)} // => { page in Kernel.available'}}
 }
 
@@ -119,12 +118,17 @@ pred traces {
     )
 }
 
+--- TRACES
+// These are some example traces to understand our model. Feel free to play around with the min/max tracelengths at the top of the file,
+// but keep in mind that changing those values will affect the test runtimes. You can also grab the code from any of the tests and generate a trace with it
+// (see the last run statement for an example).
+
 // CASE : basic trace
 run {
     traces
 } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
 
-// CASE : User process has mappings then exits (multi-free)
+// CASE : User process has mappings then exits
 // run {
 //     traces
 //     some p : UserProcess | eventually (some p.pagetable and exit[p, p])
@@ -135,3 +139,19 @@ run {
 //     traces
 //     some p : UserProcess | eventually (some p.pagetable and kalloc[p, p])
 // } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+
+// CASE : kfree gets called
+// run {
+//     traces
+//     some page : Page, p : Process | eventually(kfree[page, p])
+// } for exactly 2 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+
+// CASE : Virtual Address is shared between processes (traces and sameVA from tests)
+// run {
+//     traces
+//     eventually (
+//         some disj p1, p2 : UserProcess | {
+//             some va : VirtualAddress | (some p1.pagetable[va]) and (some p2.pagetable[va])
+//         } 
+//     )
+// } for exactly 3 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
