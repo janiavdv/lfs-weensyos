@@ -1,6 +1,8 @@
 # CSCI 1710 Final Project: Operating System Model
 
 ## Project Details
+We would recommend reading this document in our [GitHub repository](https://github.com/janiavdv/lfs-weensyos) for easier readability.
+
 Our final project models [cs300's WeensyOS](https://cs.brown.edu/courses/csci0300/2023/assign/projects/project4.html) project, which requires students to implement a small ("weensy") operating system. This involves virtual memory and pagetables, enforcing kernel/process isolation, and the functions `kalloc()`, `kfree()`, and `exit()`. 
 
 The fundamental predicates in our model are:
@@ -8,7 +10,7 @@ The fundamental predicates in our model are:
 - `kalloc[proc : Process, caller : Process]`: allocates a `Page` from the `available` set to `proc`, if `caller = proc` (security enforcement). If there are no `available` `Page`s, it is unsat.
 - `kfree[page : Page, caller : Process]`: frees `page` from `caller` if `page` is currently mapped to by `caller`. 
 - `exit[proc : UserProcess, caller : Process]`: removes `proc` from the `active` set of `UserProcess`es and frees all of the `Page`s it currently maps to (if `proc = caller`). 
-- `doNothing`: maintains the `active` and `available` sets between two states, as well as all `Process`es' `pagetable`s.
+- `doNothing`: maintains the `active` and `available` sets between two states, as well as all `Process`es' `pagetable`s. Sometimes operating systems are doing things other than allocating/freeing memory or exiting processes--this predicate reflects that.
 - `traces`: ensures the first state satisfies `init`, then for the rest of the states, either `kalloc`s, `kfree`s, `exit`s, or does `doNothing`. 
 
 ## Tradeoffs/Abstraction Choices
