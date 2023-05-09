@@ -1,7 +1,7 @@
 # CSCI 1710 Final Project: Operating System Model
 
 ## Project Details
-We would recommend reading this document in our [GitHub repository](https://github.com/janiavdv/lfs-weensyos) for easier readability. Also, see our trace video with annotations at [this link](https://drive.google.com/file/d/14rLqGMLefDRt9AwCw5eF_RSMHEkGOSRD/view?usp=sharing).
+We would recommend reading this document in our [GitHub repository](https://github.com/janiavdv/lfs-weensyos) for easier readability. Also, see our trace video with annotations at [this link](https://drive.google.com/file/d/1RUT0mscOgU45sIYAJd2i1hDcrnNbmyKh/view?usp=share_link).
 
 Our final project models [cs300's WeensyOS](https://cs.brown.edu/courses/csci0300/2023/assign/projects/project4.html) project, which requires students to implement a small ("weensy") operating system. This involves virtual memory and pagetables, enforcing kernel/process isolation, and the functions `kalloc()`, `kfree()`, and `exit()`. 
 

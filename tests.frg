@@ -87,7 +87,13 @@ pred availOrAlloc {
 
 // Memory can be reused by another process if it’s been freed.
 pred canReuse {
-    eventually (some p : Page, proc : Process | once(kfree[p, proc]) and eventually(p not in Kernel.available))
+    eventually (
+        some p : Page | {
+            some disj proc1, proc2 : Process | {
+                once(kfree[p, proc1]) and (some va : VirtualAddress | proc2.pagetable[va] = p)
+            }
+        }
+    )
 }
 
 // Multiple processes can use the same virtual address

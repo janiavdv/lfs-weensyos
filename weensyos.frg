@@ -120,8 +120,7 @@ pred traces {
 
 --- TRACES
 // These are some example traces to understand our model. Feel free to play around with the min/max tracelengths at the top of the file,
-// but keep in mind that changing those values will affect the test runtimes. You can also grab the code from any of the tests and generate a trace with it
-// (see the last run statement for an example).
+// but keep in mind that changing those values will affect the test runtimes. You can also grab the code from any of the tests and generate a trace with it.
 
 // CASE : basic trace
 run {
@@ -153,5 +152,17 @@ run {
 //         some disj p1, p2 : UserProcess | {
 //             some va : VirtualAddress | (some p1.pagetable[va]) and (some p2.pagetable[va])
 //         } 
+//     )
+// } for exactly 3 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
+
+// CASE: A page is freed by one process and eventually reused by another (traces and canReuse from tests)
+// run {
+//     traces
+//     eventually (
+//         some p : Page | {
+//             some disj proc1, proc2 : Process | {
+//                 once(kfree[p, proc1]) and (some va : VirtualAddress | proc2.pagetable[va] = p)
+//             }
+//         }
 //     )
 // } for exactly 3 UserProcess, exactly 5 Page, exactly 5 VirtualAddress
